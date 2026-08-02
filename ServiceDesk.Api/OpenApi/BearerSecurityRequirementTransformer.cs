@@ -12,13 +12,13 @@ namespace ServiceDesk.Api.OpenApi
             OpenApiOperationTransformerContext context,
             CancellationToken cancellationToken)
         {
-            var endpointMetadata = 
+            var endpointMetadata =
                 context.Description.ActionDescriptor.EndpointMetadata;
 
             var requiresAuthorization =
                 endpointMetadata.OfType<IAuthorizeData>().Any();
 
-            var allowsAnonymousAccess = 
+            var allowsAnonymousAccess =
                 endpointMetadata.OfType<IAllowAnonymous>().Any();
 
             if (!requiresAuthorization || allowsAnonymousAccess)
