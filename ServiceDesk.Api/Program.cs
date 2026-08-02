@@ -22,6 +22,8 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+
+    options.AddOperationTransformer<BearerSecurityRequirementTransformer>();
 });
 
 var connectionString = builder.Configuration
@@ -61,11 +63,11 @@ builder.Services
         {
             ValidateIssuer = true,
             ValidIssuer =
-            builder.Configuration["Authenticaiton:Issuer"],
+            builder.Configuration["Authentication:Issuer"],
 
             ValidateAudience = true,
             ValidAudience =
-            builder.Configuration["Authenticaiton:Audience"],
+            builder.Configuration["Authentication:Audience"],
 
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,

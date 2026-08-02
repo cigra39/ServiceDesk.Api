@@ -5,6 +5,8 @@ using ServiceDesk.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 using ServiceDesk.Api.Models;
 using ServiceDesk.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace ServiceDesk.Api.Controllers
 {
@@ -113,6 +115,38 @@ namespace ServiceDesk.Api.Controllers
             var tokenResult = await _tokenService.CreateTokenAsync(user);
 
             return Ok(tokenResult);
+        }
+
+        [Authorize]
+        [HttpGet("me")]
+        public ActionResult<CurrentUserDto> GetCurrentUser()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var email = User.FindFirstValue(ClaimTypes.Email);
+
+            var organizationIdValue = User.FindFirstValue("organizationId");
+
+            if (userId is null ||
+                email is null ||
+                !int.TryParse(organizationIdValue, out var organizationId))
+            {
+                return Unauthorized();
+            }
+
+            var roles = User.FindAll(ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .ToList();
+
+            var currentUserDto = new CurrentUserDto
+            {
+                Id = userId,
+                Email = email,
+                OrganizationId = organizationId,
+                Roles = roles
+            };
+
+            return Ok(currentUserDto);
         }
     }
 }
