@@ -22,6 +22,8 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+
+    options.AddOperationTransformer<BearerSecurityRequirementTransformer>();
 });
 
 var connectionString = builder.Configuration
@@ -53,6 +55,16 @@ var secretForKey =
     ?? throw new InvalidOperationException(
         "Authentication secret key was not found.");
 
+var issuer =
+    builder.Configuration["Authentication:Issuer"]
+    ?? throw new InvalidOperationException(
+        "Authentication issuer was not found.");
+
+var audience =
+    builder.Configuration["Authentication:Audience"]
+    ?? throw new InvalidOperationException(
+        "Authentication audience was not found.");
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -60,12 +72,10 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer =
-            builder.Configuration["Authenticaiton:Issuer"],
+            ValidIssuer = issuer,
 
             ValidateAudience = true,
-            ValidAudience =
-            builder.Configuration["Authenticaiton:Audience"],
+            ValidAudience = audience,
 
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
