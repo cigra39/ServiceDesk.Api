@@ -3,7 +3,7 @@
     public interface ICurrentUserService
     {
         bool IsAuthenticated { get; }
-        String? UserId { get; }
+        string? UserId { get; }
 
         int? OrganizationId { get; }
 
