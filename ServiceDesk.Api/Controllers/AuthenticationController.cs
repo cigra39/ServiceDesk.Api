@@ -7,6 +7,8 @@ using ServiceDesk.Api.Models;
 using ServiceDesk.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using ServiceDesk.Api.Authorization;
+using ServiceDesk.Api.Models.Organizations;
 
 namespace ServiceDesk.Api.Controllers
 {
@@ -17,28 +19,40 @@ namespace ServiceDesk.Api.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ServiceDeskContext _context;
         private readonly ITokenService _tokenService;
+        private readonly ICurrentUserService _currentUserService;
 
         public AuthenticationController(
             UserManager<ApplicationUser> userManager,
             ServiceDeskContext context,
-            ITokenService tokenService)
+            ITokenService tokenService,
+            ICurrentUserService currentUserService)
         {
             _userManager = userManager;
             _context = context;
             _tokenService = tokenService;
+            _currentUserService = currentUserService;
         }
 
+        [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)]
         [HttpPost("register")]
         public async Task<ActionResult<RegisteredUserDto>> Register(
             RegisterUserDto registerUserDto)
         {
+            var organizationId = _currentUserService.OrganizationId;
+
+            if (organizationId is null)
+            {
+                return Forbid();
+            }
+
             var organizationExists = await _context.Organizations
                 .AnyAsync(organization =>
-                organization.Id == registerUserDto.OrganizationId);
+                organization.Id == organizationId.Value &&
+                organization.IsActive);
 
             if (!organizationExists)
             {
-                return BadRequest("Organization does not exist.");
+                return Forbid();
             }
 
             var user = new ApplicationUser
@@ -47,7 +61,7 @@ namespace ServiceDesk.Api.Controllers
                 Email = registerUserDto.Email.Trim(),
                 FirstName = registerUserDto.FirstName.Trim(),
                 LastName = registerUserDto.LastName.Trim(),
-                OrganizationId = registerUserDto.OrganizationId,
+                OrganizationId = organizationId.Value,
                 IsActive = true,
                 CreatedAtUtc = DateTime.UtcNow
             };
@@ -66,7 +80,7 @@ namespace ServiceDesk.Api.Controllers
             }
 
             var roleResult = await _userManager.AddToRoleAsync(
-                user, "Customer");
+                user, RoleNames.Customer);
 
             if (!roleResult.Succeeded)
             {
@@ -84,10 +98,100 @@ namespace ServiceDesk.Api.Controllers
                 LastName = user.LastName,
                 Email = user.Email!,
                 OrganizationId = user.OrganizationId,
-                Role = "Customer"
+                Role = RoleNames.Customer
             };
 
             return StatusCode(StatusCodes.Status201Created, registeredUserDto);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("onboard")]
+        public async Task<ActionResult<OnboardingResultDto>> Onboard(
+            OnboardOrganizationDto onboardOrganizationDto)
+        {
+            var email = onboardOrganizationDto.Email.Trim();
+
+            var existingUser = await _userManager.FindByEmailAsync(email);
+
+            if (existingUser is not null)
+            {
+                ModelState.AddModelError(
+                    nameof(onboardOrganizationDto.Email),
+                    "A user with this email already exists.");
+
+                return ValidationProblem(ModelState);
+            }
+
+            await using var transaction =
+                await _context.Database.BeginTransactionAsync();
+
+            var organization = new Organization
+            {
+                Name = onboardOrganizationDto.OrganizationName.Trim(),
+            };
+
+            _context.Organizations.Add(organization);
+            await _context.SaveChangesAsync();
+
+            var owner = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                FirstName = onboardOrganizationDto.FirstName.Trim(),
+                LastName = onboardOrganizationDto.LastName.Trim(),
+                OrganizationId = organization.Id,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            var creationResult = await _userManager.CreateAsync(
+                owner, onboardOrganizationDto.Password);
+
+            if (!creationResult.Succeeded)
+            {
+                await transaction.RollbackAsync();
+                foreach (var error in creationResult.Errors)
+                {
+                    ModelState.AddModelError(error.Code, error.Description);
+                }
+                return ValidationProblem(ModelState);
+            }
+
+            var roleResult = await _userManager.AddToRoleAsync(
+                owner, RoleNames.Owner);
+
+            if (!roleResult.Succeeded)
+            {
+                await transaction.RollbackAsync();
+
+                return Problem(
+                    detail: "The owner role could not be assigned.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            await transaction.CommitAsync();
+
+            var result = new OnboardingResultDto
+            {
+                Organization = new OrganizationDto
+                {
+                    Id = organization.Id,
+                    Name = organization.Name,
+                    CreatedAtUtc = organization.CreatedAtUtc,
+                    IsActive = organization.IsActive
+                },
+                Owner = new RegisteredUserDto
+                {
+                    Id = owner.Id,
+                    FirstName = owner.FirstName,
+                    LastName = owner.LastName,
+                    Email = owner.Email!,
+                    OrganizationId = owner.OrganizationId,
+                    Role = RoleNames.Owner
+                }
+            };
+
+            return StatusCode(StatusCodes.Status201Created, result);
         }
 
         [HttpPost("login")]
@@ -121,15 +225,15 @@ namespace ServiceDesk.Api.Controllers
         [HttpGet("me")]
         public ActionResult<CurrentUserDto> GetCurrentUser()
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userId = _currentUserService.UserId;
+
+            var organizationId = _currentUserService.OrganizationId;
 
             var email = User.FindFirstValue(ClaimTypes.Email);
 
-            var organizationIdValue = User.FindFirstValue("organizationId");
-
             if (userId is null ||
                 email is null ||
-                !int.TryParse(organizationIdValue, out var organizationId))
+                organizationId is null)
             {
                 return Unauthorized();
             }
@@ -142,7 +246,7 @@ namespace ServiceDesk.Api.Controllers
             {
                 Id = userId,
                 Email = email,
-                OrganizationId = organizationId,
+                OrganizationId = organizationId.Value,
                 Roles = roles
             };
 

@@ -2,8 +2,12 @@
 
 namespace ServiceDesk.Api.Models
 {
-    public class RegisterUserDto
+    public class OnboardOrganizationDto
     {
+        [Required]
+        [MaxLength(100)]
+        public string OrganizationName { get; set; } = string.Empty;
+
         [Required]
         [MaxLength(50)]
         public string FirstName { get; set; } = string.Empty;

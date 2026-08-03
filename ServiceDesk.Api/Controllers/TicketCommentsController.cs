@@ -4,18 +4,25 @@ using ServiceDesk.Api.DbContexts;
 using ServiceDesk.Api.Models.TicketComments;
 using ServiceDesk.Api.Entities;
 using ServiceDesk.Api.Enums;
+using Microsoft.AspNetCore.Authorization;
+using ServiceDesk.Api.Services;
 
 namespace ServiceDesk.Api.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/organizations/{organizationId:int}/tickets/{ticketId:int}/comments")]
     public class TicketCommentsController : ControllerBase
     {
         private readonly ServiceDeskContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public TicketCommentsController(ServiceDeskContext context)
+        public TicketCommentsController(
+            ServiceDeskContext context,
+            ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         [HttpGet]
@@ -23,6 +30,11 @@ namespace ServiceDesk.Api.Controllers
             int organizationId,
             int ticketId)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var ticketExists = await _context.Tickets
                 .AnyAsync(ticket => ticket.Id == ticketId &&
                 ticket.OrganizationId == organizationId);
@@ -56,6 +68,11 @@ namespace ServiceDesk.Api.Controllers
             int ticketId,
             int commentId)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var comment = await _context.TicketComments
                 .AsNoTracking()
                 .Where(comment => comment.Id == commentId &&
@@ -82,6 +99,11 @@ namespace ServiceDesk.Api.Controllers
             int ticketId,
             CreateTicketCommentDto createTicketCommentDto)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var ticket = await _context.Tickets
                 .FirstOrDefaultAsync(ticket => ticket.Id == ticketId &&
                     ticket.OrganizationId == organizationId);
@@ -121,6 +143,11 @@ namespace ServiceDesk.Api.Controllers
                 nameof(GetComment),
                 new { organizationId, ticketId, commentId = comment.Id },
                 commentDto);
+        }
+
+        private bool CanAccessOrganization(int organizationId)
+        {
+            return _currentUserService.OrganizationId == organizationId;
         }
     }
 }
