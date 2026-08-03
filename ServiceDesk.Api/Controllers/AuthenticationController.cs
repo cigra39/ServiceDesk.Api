@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using ServiceDesk.Api.Authorization;
 using ServiceDesk.Api.Models.Organizations;
+using Microsoft.AspNetCore.RateLimiting;
+using ServiceDesk.Api.RateLimiting;
 
 namespace ServiceDesk.Api.Controllers
 {
@@ -105,6 +107,7 @@ namespace ServiceDesk.Api.Controllers
         }
 
         [AllowAnonymous]
+        [EnableRateLimiting(RateLimitPolicyNames.Onboarding)]
         [HttpPost("onboard")]
         public async Task<ActionResult<OnboardingResultDto>> Onboard(
             OnboardOrganizationDto onboardOrganizationDto)
@@ -194,6 +197,7 @@ namespace ServiceDesk.Api.Controllers
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
+        [EnableRateLimiting(RateLimitPolicyNames.Login)]
         [HttpPost("login")]
         public async Task<ActionResult<TokenResult>> Login(
             LoginUserDto loginUserDto)
