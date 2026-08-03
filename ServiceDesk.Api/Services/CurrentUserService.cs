@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
-using System.Security.Claims;
+﻿using System.Security.Claims;
 
 namespace ServiceDesk.Api.Services
 {
