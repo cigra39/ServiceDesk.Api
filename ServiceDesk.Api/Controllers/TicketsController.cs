@@ -4,24 +4,36 @@ using ServiceDesk.Api.DbContexts;
 using ServiceDesk.Api.Models.Tickets;
 using ServiceDesk.Api.Entities;
 using ServiceDesk.Api.Enums;
+using Microsoft.AspNetCore.Authorization;
+using ServiceDesk.Api.Services;
 
 namespace ServiceDesk.Api.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/organizations/{organizationId:int}/tickets")]
     public class TicketsController : ControllerBase
     {
         private readonly ServiceDeskContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public TicketsController(ServiceDeskContext context)
+        public TicketsController(
+            ServiceDeskContext context,
+            ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<TicketDto>>> GetTickets(
             int organizationId)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var organizationExists = await _context.Organizations
                 .AnyAsync(organization =>
                     organization.Id == organizationId);
@@ -54,6 +66,11 @@ namespace ServiceDesk.Api.Controllers
         public async Task<ActionResult<TicketDto>> GetTicket(
             int organizationId, int ticketId)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var ticket = await _context.Tickets
                 .AsNoTracking()
                 .Where(ticket =>
@@ -82,6 +99,11 @@ namespace ServiceDesk.Api.Controllers
         public async Task<ActionResult<TicketDto>> CreateTicket(
             int organizationId, CreateTicketDto createTicketDto)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var organizationExists = await _context.Organizations
                 .AnyAsync(organization =>
                     organization.Id == organizationId);
@@ -121,6 +143,11 @@ namespace ServiceDesk.Api.Controllers
             int ticketId,
             UpdateTicketDto updateTicketDto)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var ticket = await _context.Tickets
                 .FirstOrDefaultAsync(ticket =>
                     ticket.OrganizationId == organizationId &&
@@ -143,6 +170,11 @@ namespace ServiceDesk.Api.Controllers
             int ticketId,
             UpdateTicketStatusDto updateTicketStatusDto)
         {
+            if (!CanAccessOrganization(organizationId))
+            {
+                return Forbid();
+            }
+
             var ticket = await _context.Tickets
                 .FirstOrDefaultAsync(ticket =>
                     ticket.OrganizationId == organizationId &&
@@ -196,6 +228,11 @@ namespace ServiceDesk.Api.Controllers
 
                 _ => false
             };
+        }
+
+        private bool CanAccessOrganization(int organizationId)
+        {
+            return _currentUserService.OrganizationId == organizationId;
         }
     }
 }

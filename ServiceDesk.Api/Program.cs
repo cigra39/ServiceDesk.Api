@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using ServiceDesk.Api.Services;
 using ServiceDesk.Api.OpenApi;
+using ServiceDesk.Api.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,6 +93,10 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -101,11 +106,11 @@ using (var scope = app.Services.CreateScope())
 
     string[] roleNames =
     [
-            "Owner",
-            "Admin",
-            "Agent",
-            "Customer"
-
+            RoleNames.PlatformAdmin,
+            RoleNames.Owner,
+            RoleNames.Admin,
+            RoleNames.Agent,
+            RoleNames.Customer
     ];
 
     foreach (var roleName in roleNames)
