@@ -8,6 +8,11 @@ using Microsoft.IdentityModel.Tokens;
 using ServiceDesk.Api.Services;
 using ServiceDesk.Api.OpenApi;
 using ServiceDesk.Api.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using ServiceDesk.Api.RateLimiting;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,6 +96,76 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (
+        context,
+        cancellationToken) =>
+    {
+        int? retryAfterSeconds = null;
+
+        if (context.Lease.TryGetMetadata(
+            MetadataName.RetryAfter,
+            out var retryAfter))
+        {
+            retryAfterSeconds =
+            (int)Math.Ceiling(retryAfter.TotalSeconds);
+
+            context.HttpContext.Response.Headers["Retry-After"] =
+                retryAfterSeconds.Value.ToString(
+                    CultureInfo.InvariantCulture);
+        }
+
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Title = "Too many requests",
+            Detail = retryAfterSeconds is null
+                ? "Try again later."
+                : $"Try again in {retryAfterSeconds} seconds."
+        };
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            problemDetails,
+            cancellationToken);
+    };
+
+    options.AddPolicy(
+        RateLimitPolicyNames.Login,
+        httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey:
+                httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    QueueProcessingOrder =
+                        QueueProcessingOrder.OldestFirst,
+                    AutoReplenishment = true
+                }));
+    options.AddPolicy(
+        RateLimitPolicyNames.Onboarding,
+        httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey:
+                httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                QueueProcessingOrder =
+                    QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+});
+
 builder.Services.AddScoped<ITokenService, TokenService>();
 
 builder.Services.AddHttpContextAccessor();
@@ -143,6 +218,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
