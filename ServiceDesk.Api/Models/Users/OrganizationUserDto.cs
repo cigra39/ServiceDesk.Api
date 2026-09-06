@@ -1,6 +1,6 @@
-﻿namespace ServiceDesk.Api.Models
+﻿namespace ServiceDesk.Api.Models.Users
 {
-    public class RegisteredUserDto
+    public class OrganizationUserDto
     {
         public string Id { get; set; } = string.Empty;
 
@@ -12,6 +12,10 @@
 
         public int OrganizationId { get; set; }
 
-        public string Role { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+
+        public DateTime CreatedAtUtc { get; set; }
+
+        public IEnumerable<string> Roles { get; set; } = [];
     }
 }

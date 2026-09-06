@@ -3,6 +3,7 @@ using ServiceDesk.Api.Entities;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
+using ServiceDesk.Api.Authentication;
 
 namespace ServiceDesk.Api.Services
 {
@@ -23,6 +24,7 @@ namespace ServiceDesk.Api.Services
         {
 
             var roles = await _userManager.GetRolesAsync(user);
+            var securityStamp = await _userManager.GetSecurityStampAsync(user);
 
             var claims = new List<Claim>
             {
@@ -31,7 +33,10 @@ namespace ServiceDesk.Api.Services
                 new Claim(ClaimTypes.Email, user.Email!),
                 new Claim(
                     "organizationId",
-                    user.OrganizationId.ToString())
+                    user.OrganizationId.ToString()),
+                new Claim(
+                    CustomClaimTypes.SecurityStamp,
+                    securityStamp)
             };
 
             foreach (var role in roles)
