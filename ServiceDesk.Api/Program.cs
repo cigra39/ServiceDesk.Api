@@ -13,6 +13,8 @@ using ServiceDesk.Api.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
+using System.Security.Claims;
+using ServiceDesk.Api.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,6 +93,57 @@ builder.Services
 
             ClockSkew = TimeSpan.Zero
 
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userId = context.Principal?
+                .FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    context.Fail("The token does not contain a user identifier.");
+
+                    return;
+                }
+
+                var tokenSecurityStamp = context.Principal?
+                    .FindFirstValue(CustomClaimTypes.SecurityStamp);
+
+                if (string.IsNullOrWhiteSpace(tokenSecurityStamp))
+                {
+                    context.Fail("The token does not contain a security stamp.");
+                    return;
+                }
+
+                var dbContext = context.HttpContext.RequestServices
+                .GetRequiredService<ServiceDeskContext>();
+
+                var account = await dbContext.Users
+                    .AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => new
+                    {
+                        user.IsActive,
+                        user.SecurityStamp,
+                        OrganizationIsActive = user.Organization.IsActive
+                    })
+                    .SingleOrDefaultAsync(
+                       context.HttpContext.RequestAborted);
+
+                if (account is null ||
+                    !account.IsActive ||
+                    !account.OrganizationIsActive ||
+                    !string.Equals(
+                        account.SecurityStamp,
+                        tokenSecurityStamp,
+                        StringComparison.Ordinal))
+                {
+                    context.Fail("The user account or token is no longer valid.");
+                }
+            }
         };
     });
 

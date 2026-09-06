@@ -2,8 +2,6 @@
 using ServiceDesk.Api.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using ServiceDesk.Api.Services;
-using ServiceDesk.Api.Authorization;
-
 namespace ServiceDesk.Api.DbContexts;
 
 public class ServiceDeskContext : IdentityDbContext<ApplicationUser>
@@ -20,9 +18,6 @@ public class ServiceDeskContext : IdentityDbContext<ApplicationUser>
     private int? CurrentOrganizationId =>
         _currentUserService.OrganizationId;
 
-    private bool IsPlatformAdmin =>
-        _currentUserService.IsInRole(RoleNames.PlatformAdmin);
-
     public DbSet<Organization> Organizations { get; set; } = null!;
 
     public DbSet<Ticket> Tickets { get; set; } = null!;
@@ -32,12 +27,6 @@ public class ServiceDeskContext : IdentityDbContext<ApplicationUser>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<Organization>()
-            .HasQueryFilter(organization =>
-                IsPlatformAdmin ||
-                (CurrentOrganizationId.HasValue &&
-                organization.Id == CurrentOrganizationId.Value));
 
         modelBuilder.Entity<Ticket>()
             .HasQueryFilter(ticket =>
